@@ -3,6 +3,17 @@ import React, { useEffect, useMemo, useState } from 'react'
 import Gantt, { CapEvent, Task } from '../components/Gantt'
 import Tour, { TourStep } from '../components/Tour'
 
+type Team = 'Content'|'Design'|'Ops'|'Support'
+
+// map tool/outcome text to a team (very simple demo rules)
+function teamForSource(src:string): Team{
+  const s = src.toLowerCase()
+  if (s.includes('draft') || s.includes('copy') || s.includes('status')) return 'Content'
+  if (s.includes('design')) return 'Design'
+  if (s.includes('agent') || s.includes('questions')) return 'Support'
+  return 'Ops'
+}
+
 type Evidence = { taskId?: string; label?: string; daysSaved?: number; value: number; tier: 'A'|'B'|'C'; details: string }
 type Token = { minutes:number; source:string; confidence:'High'|'Medium'|'Low' }
 
@@ -47,6 +58,41 @@ export default function Page(){
   const [tourIdx, setTourIdx]   = useState(0)
 
   useEffect(()=>{ mintCapacity() },[simRPA, simSVC])
+
+  const [panelTask, setPanelTask] = useState<Task|null>(null)
+const [panelTeam, setPanelTeam] = useState<Team>('Ops')
+const [panelHours, setPanelHours] = useState<number>(8)
+
+// weekly capacity by team from tokens
+const teamHours = useMemo(()=>{
+  const obj: Record<Team, number> = {Content:0, Design:0, Ops:0, Support:0}
+  tokens.forEach(t=>{
+    const hrs = Math.round(t.minutes/60)
+    const team = teamForSource(t.source)
+    obj[team] += hrs
+  })
+  return obj
+},[tokens])
+
+function openPanel(taskId:string){
+  const t = tasks.find(x=>x.id===taskId) || null
+  setPanelTask(t)
+  // naive recommendation by task name
+  const name = (t?.name||'').toLowerCase()
+  let rec:Team = 'Ops'
+  if(name.includes('design')) rec='Design'
+  else if(name.includes('email')||name.includes('copy')||name.includes('seo')) rec='Content'
+  else if(name.includes('pilot')||name.includes('qa')) rec='Support'
+  setPanelTeam(rec)
+  setPanelHours(Math.min(8, teamHours[rec]||8))
+}
+
+// confirm redeploy
+function confirmRedeploy(){
+  if(!panelTask) return
+  allocate(panelTask.id, panelHours)
+  setPanelTask(null)
+}
 
   // Capacity minting → tokens + weekly capacity pills
   function mintCapacity(){
@@ -281,7 +327,7 @@ function closeTask(taskId: string, iso: string){
 
       <div className="card" id="gantt">
         <h3 className="h">Gantt — weekly freed time + critical path hotspots</h3>
-        <Gantt tasks={tasksFiltered} capacity={capFiltered} onAllocate={allocate} onComplete={closeTask}/>
+        <Gantt tasks={tasksFiltered} capacity={capFiltered} onAllocate={allocate} onComplete={closeTask} onView={openPanel}/>
       </div>
 
       <div className="card">
