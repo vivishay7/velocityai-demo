@@ -21,7 +21,7 @@ hr{border-color:#1f2937;margin:16px 0}
 .switch input{accent-color:#3b82f6;width:18px;height:18px}
 
 /* Gantt */
-/* No horizontal scrollbar on Gantt */
+/* No horizontal scrollbar */
 .gantt{position:relative; overflow-x:hidden; border:1px solid #253041; border-radius:12px}
 .ganttGrid{display:grid}
 .ganttHeader{display:contents}
@@ -33,14 +33,31 @@ hr{border-color:#1f2937;margin:16px 0}
 .tName{font-weight:700}
 .dayCell{position:relative;height:36px;border-left:1px solid #17202b}
 .dayCell:nth-child(odd){background:#0b1420}
+
+/* Bars & states */
 .bar{position:absolute;top:8px;height:20px;border-radius:8px;display:flex;align-items:center;gap:6px;padding:0 8px;font-size:12px;white-space:nowrap}
 .bar.hot{background:#3b1b1b;color:#ff8b8b;border:1px solid #6b1d1d}
 .bar.amber{background:#3b2a15;color:#ffcc80;border:1px solid #6b3d0f}
 .bar.ok{background:#18351f;color:#79d08f;border:1px solid #1e6f43}
 .allocPill{background:#0b2140;color:#9cc2ff;border:1px solid #214c8e;border-radius:12px;padding:2px 6px;font-size:11px}
+
+
+/* Weekly capacity pill */
 .capPill{position:absolute;top:6px;left:6px;background:#12321f;color:#69d391;border:1px solid #1d7a42;border-radius:12px;padding:2px 6px;font-size:11px}
+
+/* Actions */
 .actionCell{padding:8px;display:flex;gap:8px;align-items:center}
+
+/* Legend */
 .legend{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid #253041;color:#a7b1bd;font-size:12px}
+.dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+.dot.red{background:#ef4444}
+.dot.amber{background:#f59e0b}
+.dot.green{background:#22c55e}
+
+/* Dependency arrows */
+.depsSvg{position:absolute;top:0;left:0;pointer-events:none}
+
 .dot{width:10px;height:10px;border-radius:50%;display:inline-block}
 .dot.red{background:#ef4444}
 .dot.amber{background:#f59e0b}
@@ -54,5 +71,3 @@ hr{border-color:#1f2937;margin:16px 0}
 .tourCard h3 { margin-bottom: 12px; }
 .tourCard p { margin-bottom: 16px; }
 .tourCard button { margin-top: 8px; }
-
-.depsSvg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
