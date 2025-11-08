@@ -42,35 +42,29 @@ useEffect(()=>{ mintCapacity() },[simRPA, simSVC])
 // Capacity minting (creates tokens + freed-time pills with project tags)
 function mintCapacity(){
 const events = [
-{ label:'Zap lead triage', minutes: 600STC.perZapRun, dayOffset: 1, conf:'High' as const, project:'Q4 Campaign Email Sprint' },
-{ label:'Weekly GTM cut', minutes: 306, dayOffset: 0, conf:'High' as const, project:'Q4 Sales Enablement' }, // 6 attendees x 30m
-{ label:'Auto‑status', minutes: 6STC.weeklyStatus, dayOffset: 2, conf:'High' as const, project:'Q4 Sales Enablement' },
-{ label:'Faster drafts', minutes: 71STC.makerMinutesPerDay, dayOffset: 3, conf:'Medium' as const, project:'Q4 Campaign Email Sprint' },
-...(simRPA ? [{ label:'RPA block', minutes: 10000STC.rpaMinutesPerTxnSTC.realization, dayOffset: 1, conf:'High' as const, project:'Website Refresh' }] : []),
-...(simSVC ? [{ label:'Service deflection', minutes: 400STC.serviceMinPerTicket, dayOffset: 4, conf:'High' as const, project:'Service' }] : []),
+{ label: 'Zap lead triage', minutes: 600 * STC.perZapRun, dayOffset: 1, conf: 'High' as const, project: 'Q4 Campaign Email Sprint' },
+{ label: 'Weekly GTM cut', minutes: 30 * 6, dayOffset: 0, conf: 'High' as const, project: 'Q4 Sales Enablement' }, // 6 attendees × 30m
+{ label: 'Auto-status', minutes: 6 * STC.weeklyStatus, dayOffset: 2, conf: 'High' as const, project: 'Q4 Sales Enablement' },
+{ label: 'Faster drafts', minutes: 7 * 1 * STC.makerMinutesPerDay, dayOffset: 3, conf: 'Medium' as const, project: 'Q4 Campaign Email Sprint' },
+...(simRPA ? [{
+label: 'RPA block',
+minutes: 10_000 * STC.rpaMinutesPerTxn * STC.realization,
+dayOffset: 1,
+conf: 'High' as const,
+project: 'Website Refresh'
+}] : []),
+...(simSVC ? [{
+label: 'Service deflection',
+minutes: 400 * STC.serviceMinPerTicket,
+dayOffset: 4,
+conf: 'High' as const,
+project: 'Service'
+}] : []),
 ]
-setTokens(events.map(e=>({ minutes:e.minutes, source:e.label, confidence:e.conf })))
-setCap(events.map(e=>({ dayOffset:e.dayOffset, label:e.label, hours: toIntHrs(e.minutes), project:e.project })))
-}
 
-// Allocation and completion
-function allocate(taskId:string, hours:number){
-// Reduce pooled tokens starting from High confidence
-const order: Array<'High'|'Medium'|'Low'> = ['High','Medium','Low']
-const newTokens = [...tokens]
-let minsNeeded = hours60
-for(const tier of order){
-for(let i=0;i<newTokens.length;i++){
-const t = newTokens[i]; if(t.confidence!==tier || t.minutes<=0) continue
-const take = Math.min(t.minutes, minsNeeded)
-newTokens[i] = {...t, minutes: t.minutes - take}
-minsNeeded -= take
-if(minsNeeded<=0) break
-}
-if(minsNeeded<=0) break
-}
-setTokens(newTokens)
-setTasks(ts=>ts.map(t=> t.id===taskId ? {...t, allocatedMinutes:(t.allocatedMinutes||0)+hours60} : t))
+// store for UI
+setTokens(events.map(e => ({ minutes: e.minutes, source: e.label, confidence: e.conf })))
+setCap(events.map(e => ({ dayOffset: e.dayOffset, label: e.label, hours: Math.round(e.minutes/60), project: e.project })))
 }
 
 function closeTask(taskId:string, iso:string){
