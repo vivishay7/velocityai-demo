@@ -19,7 +19,7 @@ const STC = {
   realization: 0.8,
 }
 
-// NOTE: dependsOn is a single string (not array) to match the Gantt Task type
+// dependsOn is a single string to match the Gantt type
 const seeded: Task[] = [
   { id:'t1', name:'Design QA', project:'Q4 Sales Enablement', assignees:['u1'], start:d(-12), due:d(+10), baselineDays:4, slackDays:0, codPerDay:7500, mvi:0.84, status:'open', allocatedMinutes:0 },
   { id:'t2', name:'Field Pilot Synthesis', project:'Q4 Sales Enablement', assignees:['u2'], start:d(-10), due:d(+14), baselineDays:3, slackDays:0, codPerDay:3500, mvi:0.77, status:'open', allocatedMinutes:0, capability:true, dependsOn:'t1' },
@@ -39,9 +39,9 @@ export default function Page(){
   const [project, setProject] = useState<'All'|string>('All')
   const [seededOnce, setSeededOnce] = useState(false)
 
-  // Guided tour state
+  // Guided tour
   const [tourOpen, setTourOpen] = useState(false)
-  const [tourIdx, setTourIdx] = useState(0)
+  const [tourIdx, setTourIdx]   = useState(0)
 
   useEffect(()=>{ mintCapacity() },[simRPA, simSVC])
 
@@ -49,7 +49,7 @@ export default function Page(){
   function mintCapacity(){
     const events = [
       { label: 'HubSpot Workflows: automated routing', minutes: 600 * STC.perZapRun, dayOffset: 1, conf: 'High' as const, project: 'Q4 Campaign Email Sprint' },
-      { label: 'Microsoft Copilot: shorter weekly meeting', minutes: 30 * 6, dayOffset: 0, conf: 'High' as const, project: 'Q4 Sales Enablement' }, // 6 attendees × 30m
+      { label: 'Microsoft Copilot: shorter weekly meeting', minutes: 30 * 6, dayOffset: 0, conf: 'High' as const, project: 'Q4 Sales Enablement' },
       { label: 'Asana AI: auto-status created', minutes: 6 * STC.weeklyStatus, dayOffset: 2, conf: 'High' as const, project: 'Q4 Sales Enablement' },
       { label: 'Copilot: first draft faster', minutes: 7 * 1 * STC.makerMinutesPerDay, dayOffset: 3, conf: 'Medium' as const, project: 'Q4 Campaign Email Sprint' },
       ...(simRPA ? [{
@@ -102,7 +102,7 @@ export default function Page(){
       if(t.capability && t.allocatedMinutes){
         const capHrs = t.allocatedMinutes/60
         setEvidence(ev=>[
-          { label:'Capability growth', value: capHrs*120, tier:'C', details: `${capHrs.toFixed(1)}h × $120/h (proxy)` },
+          { label:'Capability growth', value: capHrs*120, tier:'C', details: `${capHrs.toFixed(1)}h x $120/h (proxy)` },
           ...ev
         ])
       }
@@ -114,7 +114,7 @@ export default function Page(){
     })
   }
 
-  // Harvest hard savings (demo buttons)
+  // Harvest hard savings
   function harvestRPA(){
     const rpa = tokens.find(t=>t.source.includes('RPA'))
     if(!rpa) return
@@ -132,13 +132,13 @@ export default function Page(){
     const tickets = Math.round(svc.minutes / STC.serviceMinPerTicket)
     const dollars = tickets * 6.5
     setEvidence(ev=>[
-      { label:'Service cost avoided', value:dollars, tier:'A', details: `${tickets} deflected × $6.5/ticket.` },
+      { label:'Service cost avoided', value:dollars, tier:'A', details: `${tickets} deflected x $6.5/ticket.` },
       ...ev
     ])
   }
   function recordSQLLift(n=12){
     setEvidence(ev=>[
-      { label:'More qualified deals (strategic)', value:n*5600, tier:'C', details: `${n} deals × $5,600 value/deal.` },
+      { label:'More qualified deals (strategic)', value:n*5600, tier:'C', details: `${n} deals x $5,600 value/deal.` },
       ...ev
     ])
   }
@@ -159,20 +159,20 @@ export default function Page(){
 
   // Guided tour steps (Next/Back)
   const steps: TourStep[] = [
-    { id:'kpis', title:'1) What we measure', text:'Three kinds of dollars: Operational (faster milestones), Cost avoided (fewer external/manual hours), and Strategic (more qualified deals + skill growth).', targetId:'kpis' },
+    { id:'kpis',  title:'1) What we measure', text:'Three kinds of dollars: Operational (faster milestones), Cost avoided (fewer external/manual hours), and Strategic (more qualified deals + skill growth).', targetId:'kpis' },
     { id:'gantt', title:'2) Where time appears', text:'Green pills show weekly time created by AI tools (Copilot, Asana AI, Workflows, RPA, AI Agents). Red bars are critical‑path tasks.', targetId:'gantt' },
-    { id:'gantt', title:'3) Redeploy to priority', text:'We’ll move 8h into “Design QA” (critical path) to accelerate the launch.', targetId:'gantt', run:()=>allocate('t1', 8) },
-    { id:'gantt', title:'4) Recognize operational value', text:'Close earlier than baseline. Only realized outcomes count—no forecasts.', targetId:'gantt', run:()=>{
+    { id:'gantt', title:'3) Redeploy to priority', text:'We will move 8h into “Design QA” (critical path).', targetId:'gantt', run:()=>allocate('t1', 8) },
+    { id:'gantt', title:'4) Recognize operational value', text:'Close earlier than baseline. Only realized outcomes count.', targetId:'gantt', run:()=>{
       const earlier = new Date(); earlier.setDate(earlier.getDate()-1); closeTask('t1', earlier.toISOString())
     }},
-    { id:'harvest', title:'5) Count cost avoided', text:'Now recognize RPA contractor reduction and AI‑answered tickets.', targetId:'harvest', run:()=>{ harvestRPA(); harvestService() } },
+    { id:'harvest', title:'5) Count cost avoided', text:'Recognize RPA contractor reduction and AI‑answered tickets.', targetId:'harvest', run:()=>{ harvestRPA(); harvestService() } },
     { id:'evidence', title:'6) Add growth', text:'Record “more qualified deals” to capture strategic value. Review proof below.', targetId:'evidence', run:()=>recordSQLLift(12) },
   ]
-  const [tourOpen, setOpen] = useState(false)
-  const [tourIdx, setIdx]   = useState(0)
+  const [tourOpen2, setOpen] = useState(false)
+  const [tourIdx2, setIdx]   = useState(0)
   function startTour(){ setOpen(true); setIdx(0) }
-  function nextStep(){ const s=steps[tourIdx]; if(s?.run) s.run(); if(tourIdx<steps.length-1) setIdx(i=>i+1); else setOpen(false) }
-  function prevStep(){ if(tourIdx>0) setIdx(i=>i-1) }
+  function nextStep(){ const s=steps[tourIdx2]; if(s?.run) s.run(); if(tourIdx2<steps.length-1) setIdx(i=>i+1); else setOpen(false) }
+  function prevStep(){ if(tourIdx2>0) setIdx(i=>i-1) }
 
   // Metrics
   const capturedMin = tokens.reduce((a,b)=>a+b.minutes,0)
@@ -225,7 +225,7 @@ export default function Page(){
         <div className="card kpi">
           <h3 className="h">Quick actions</h3>
           <button className="btn" onClick={startTour}>Start guided demo</button>
-          &nbsp;<button className="btn secondary" onClick={runDemo}>Run 30‑sec demo</button>
+          &nbsp;<button className="btn secondary" onClick={runDemo}>Run 30-sec demo</button>
         </div>
         <div className="card kpi">
           <h3 className="h">Project filter</h3>
@@ -243,7 +243,7 @@ export default function Page(){
 
       <div className="card">
         <h3 className="h">Simulation toggles</h3>
-        <label className="switch"><input type="checkbox" checked={simRPA} onChange={e=>setSimRPA(e.target.checked)}/> RPA back‑office automation</label>
+        <label className="switch"><input type="checkbox" checked={simRPA} onChange={e=>setSimRPA(e.target.checked)}/> RPA back-office automation</label>
         <label className="switch"><input type="checkbox" checked={simSVC} onChange={e=>setSimSVC(e.target.checked)}/> AI Agent resolves routine questions</label>
         <span className="small"> Toggling changes capacity sources and harvestable savings.</span>
       </div>
@@ -268,4 +268,42 @@ export default function Page(){
       <div className="card" id="harvest">
         <h3 className="h">Harvest / Strategic actions</h3>
         <div className="row">
-          <div className="card kpi"><h4 className="h">RPA contractor reduction</h4><button className="btn" onClick={harvestRPA}>Recognize hard savings</button><p className="small">Counted only when POs/seats/contracts are 
+          <div className="card kpi">
+            <h4 className="h">RPA contractor reduction</h4>
+            <button className="btn" onClick={harvestRPA}>Recognize hard savings</button>
+            <p className="small">Counted only when POs/seats/contracts are reduced.</p>
+          </div>
+          <div className="card kpi">
+            <h4 className="h">AI Agent cost avoided</h4>
+            <button className="btn" onClick={harvestService}>Recognize cost avoided</button>
+          </div>
+          <div className="card kpi">
+            <h4 className="h">Record growth</h4>
+            <button className="btn" onClick={()=>recordSQLLift(12)}>Add qualified deals → $</button>
+          </div>
+        </div>
+      </div>
+
+      <div className="card" id="evidence">
+        <h3 className="h">Evidence log (realized)</h3>
+        <table className="table">
+          <thead><tr><th>Item</th><th>Days saved</th><th>$ value</th><th>Tier</th><th>Details</th></tr></thead>
+          <tbody>
+            {evidence.map((e,i)=>(
+              <tr key={i}>
+                <td>{e.taskId ? (tasks.find(x=>x.id===e.taskId)?.name || e.taskId) : (e.label || 'Item')}</td>
+                <td>{e.daysSaved!==undefined ? e.daysSaved.toFixed(1) : '—'}</td>
+                <td>${Math.round(e.value).toLocaleString()}</td>
+                <td><span className={`badge ${e.tier==='A'?'green': e.tier==='B'?'amber':'red'}`}>{e.tier}</span></td>
+                <td className="small">{e.details}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Guided tour overlay */}
+      <Tour open={tourOpen2} index={tourIdx2} steps={steps} onNext={nextStep} onPrev={prevStep} onClose={()=>setOpen(false)} />
+    </div>
+  )
+}
