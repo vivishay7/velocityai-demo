@@ -22,7 +22,7 @@ export default function Tour({ open, index, steps, onNext, onPrev, onClose }: Pr
   useEffect(() => {
     if (!open) return
     const step = steps[index]
-    // clear old highlight
+    // clear previous highlight
     document.querySelectorAll('.tour-highlight').forEach(el => el.classList.remove('tour-highlight'))
     if (step?.targetId) {
       const el = document.getElementById(step.targetId)
@@ -55,7 +55,7 @@ export default function Tour({ open, index, steps, onNext, onPrev, onClose }: Pr
         </div>
       </div>
 
-      {/* Built-in global highlight style so you don't need to touch CSS */}
+      {/* Built-in global highlight style */}
       <style jsx global>{`
         .tour-highlight{
           outline: 2px solid #3b82f6 !important;
