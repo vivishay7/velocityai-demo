@@ -1,15 +1,9 @@
 'use client'
 import React, { useEffect, useMemo, useState } from 'react'
+import Gantt from '../components/Gantt'
 
 type User = { id: string; name: string; role: string }
-type EventType =
-  | 'zap_lead_triage'
-  | 'meeting_cut'
-  | 'auto_status'
-  | 'draft_speedup'
-  | 'rpa_claims_bot'
-  | 'service_deflection'
-
+type EventType = 'zap_lead_triage'|'meeting_cut'|'auto_status'|'draft_speedup'|'rpa_block'|'service_deflection'
 type AutoEvent = { id: string; type: EventType; ts: string; data: any }
 type Token = { personId?: string; teamId: string; minutes: number; source: string; confidence: 'High'|'Medium'|'Low' }
 type Task = {
@@ -30,16 +24,14 @@ const users: User[] = [
 const STC = {
   perZapRun: 90,            // lead triage record + Slack post ~= 1.5 min
   weeklyStatus: 90,         // manual status creation
-  makerMinutesPerDay: 60,   // conservative "true focus minutes/day" for acceleration calc
-  rpaMinutesPerTxn: 1.2,    // manual minutes per transaction formerly done by humans
+  makerMinutesPerDay: 60,   // conservative "true focus minutes/day"
+  rpaMinutesPerTxn: 1.2,    // manual minutes per transaction (block)
   serviceMinPerTicket: 7,   // AHT minutes for deflectable tickets
   realization: 0.8          // oversight factor for block automation
 }
 
 // Prior manual owner share for lead triage (for attribution)
 const ownerShare: Record<string, number> = { u1: 0.6, u2: 0.25 } // Sarah 60%, Jamal 25%
-
-// Helpers
 function d(offsetDays:number){ const dt=new Date(); dt.setDate(dt.getDate()+offsetDays); return dt.toISOString() }
 function daysBetween(a:string,b:string){ return Math.round((new Date(b).getTime()-new Date(a).getTime())/86400000) }
 const toHrs = (m:number)=> Math.round((m/60)*10)/10
@@ -55,16 +47,15 @@ const initialTasks: Task[] = [
 ]
 
 export default function Demo(){
-  // Simulation toggles
-  const [simRPA, setSimRPA] = useState<boolean>(true)
-  const [simSVC, setSimSVC] = useState<boolean>(true)
+  // Toggles to simulate extra sources
+  const [simRPA, setSimRPA] = useState(true)
+  const [simSVC, setSimSVC] = useState(true)
 
-  // Token pool and tasks/evidence
   const [tokens, setTokens] = useState<Token[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
   const [evidence, setEvidence] = useState<Evidence[]>([])
 
-  // Harvest potentials and state
+  // Harvest potentials
   const [rpaPotential, setRpaPotential] = useState<{hours:number; contractorHours:number; contractorRate:number; dollars:number} | null>(null)
   const [svcPotential, setSvcPotential] = useState<{tickets:number; costPerTicket:number; dollars:number} | null>(null)
   const [harvestedRPA, setHarvestedRPA] = useState(false)
@@ -81,27 +72,26 @@ export default function Demo(){
   useEffect(()=>{ localStorage.setItem('vx_simRPA', JSON.stringify(simRPA)) },[simRPA])
   useEffect(()=>{ localStorage.setItem('vx_simSVC', JSON.stringify(simSVC)) },[simSVC])
 
-  // Mint tokens whenever toggles change
+  // Mint tokens on toggle change
   useEffect(()=>{
     const result = mintTokens(simRPA, simSVC)
     setTokens(result.tokens)
     setRpaPotential(result.rpa)
     setSvcPotential(result.svc)
     setHarvestedRPA(false); setHarvestedSVC(false)
-    localStorage.setItem('vx_tokens', JSON.stringify(result.tokens))
   },[simRPA, simSVC])
 
   const hours = useMemo(()=>groupAvailableHours(tokens),[tokens])
-  const hotspots = useMemo(()=> tasks
-    .filter(t=>t.status==='open' && t.slackDays<=0)
-    .sort((a,b)=> (b.mvi*b.codPerDay) - (a.mvi*a.codPerDay)), [tasks])
+  const allocated = Math.round(tasks.reduce((a,b)=>a+(b.allocatedMinutes||0),0)/60*10)/10
+  const realized = evidence.reduce((a,b)=>a+b.value,0)
+  const valueCreated = evidence.filter(e=>e.taskId).reduce((a,b)=>a+b.value,0)
+  const costAvoided = evidence.filter(e=>!e.taskId).reduce((a,b)=>a+b.value,0)
 
   function allocate(taskId:string, hours:number){
     let minsNeeded = hours*60
     const order = ['High','Medium','Low'] as const
     const newTokens = [...tokens]
     for(const tier of order){
-      // take from any team-level tokens first
       for(let i=0;i<newTokens.length;i++){
         const t = newTokens[i]
         if(t.teamId && !t.personId && t.confidence===tier && t.minutes>0){
@@ -117,39 +107,38 @@ export default function Demo(){
     setTasks(ts=>ts.map(t=> t.id===taskId ? {...t, allocatedMinutes:(t.allocatedMinutes||0)+(hours*60)} : t))
   }
 
-  function closeTask(taskId:string, actualClose: string){
+  function closeTask(taskId:string, actualCloseISO:string){
     setTasks(ts=>{
       const t = ts.find(x=>x.id===taskId)!; if(!t) return ts
-      const actualDays = Math.max(1, daysBetween(t.start, actualClose))
+      const actualDays = Math.max(1, daysBetween(t.start, actualCloseISO))
       const daysSaved = Math.max(0, t.baselineDays - actualDays)
       const value = daysSaved * t.codPerDay
       const tier: 'A'|'B'|'C' = (t.slackDays<=0 && daysSaved>0) ? 'B' : 'C'
       setEvidence(ev=>[{ taskId:t.id, daysSaved, value, tier,
         details:`Closed ${daysSaved.toFixed(1)}d faster than baseline ${t.baselineDays}d. CoD/day $${t.codPerDay.toLocaleString()}.` }, ...ev])
-      return ts.map(x=> x.id===taskId ? {...x, status:'closed', actualClose} : x)
+      return ts.map(x=> x.id===taskId ? {...x, status:'closed', actualClose:actualCloseISO} : x)
     })
   }
-
-  const allocated = Math.round(tasks.reduce((a,b)=>a+(b.allocatedMinutes||0),0)/60*10)/10
-  const realized = evidence.reduce((a,b)=>a+b.value,0)
 
   return (
     <div className="container">
       <h2 className="h">VelocityAI — Capacity → Redeploy → Proof (Demo)</h2>
-      <p className="small">No forecasts. Capacity comes from automation/AI signals; you allocate to critical path; dollars appear only when outcomes happen (or when hard savings are harvested).</p>
+      <p className="small">We mint capacity from automation/AI signals, route it to critical‑path work, and recognize dollars only when outcomes happen or when hard savings are harvested. No forecasts. No timesheets.</p>
 
       <div className="row">
         <div className="card kpi"><h3 className="h">Capacity captured (hrs)</h3>
           <div>High: <span className="badge green">{hours.high}</span> &nbsp; Medium: <span className="badge amber">{hours.med}</span> &nbsp; Total: <b>{hours.all}</b></div>
-          <p className="small">Sources: Zap runs, meeting cuts, auto‑status, faster drafts{simRPA?' + RPA':''}{simSVC?' + Service deflection':''}.</p>
+          <p className="small">Sources: Zap runs, meeting cuts, auto‑status, faster drafts{simRPA?' + RPA block':''}{simSVC?' + Service deflection':''}.</p>
         </div>
         <div className="card kpi"><h3 className="h">Allocated to hotspots</h3>
           <div><b>{allocated} hrs</b></div>
           <p className="small">Apply pooled hours to zero‑slack tasks (critical path).</p>
         </div>
-        <div className="card kpi"><h3 className="h">Realized value</h3>
-          <div><b>${Math.round(realized).toLocaleString()}</b></div>
-          <p className="small">Tiered evidence (A/B/C). Hard savings require “Harvest” to count.</p>
+        <div className="card kpi"><h3 className="h">Leadership dashboard</h3>
+          <div>Value created (cycle‑time): <b>${Math.round(valueCreated).toLocaleString()}</b></div>
+          <div>Cost avoided (harvested): <b>${Math.round(costAvoided).toLocaleString()}</b></div>
+          <div>Total realized: <b>${Math.round(valueCreated+costAvoided).toLocaleString()}</b></div>
+          <p className="small">Value is recognized after completion (Tiered A/B/C) or after a harvest action (PO/seat/contractor reduction).</p>
         </div>
       </div>
 
@@ -161,37 +150,8 @@ export default function Demo(){
       </div>
 
       <div className="card">
-        <h3 className="h">Hotspots (critical path, slack ≤ 0)</h3>
-        <table className="table">
-          <thead><tr><th>Task</th><th>Project</th><th>Baseline (d)</th><th>Slack</th><th>CoD/day</th><th>MVI</th><th>Allocated</th><th>Actions</th></tr></thead>
-          <tbody>
-            {hotspots.map(t=>{
-              const isHot = t.slackDays<=0
-              return <tr key={t.id}>
-                <td>{t.name}</td>
-                <td>{t.project}</td>
-                <td>{t.baselineDays}</td>
-                <td><span className={`badge ${isHot?'red':'amber'}`}>{t.slackDays}</span></td>
-                <td>${t.codPerDay.toLocaleString()}</td>
-                <td>{Math.round(t.mvi*100)}</td>
-                <td>{Math.round((t.allocatedMinutes||0)/60)}h</td>
-                <td>
-                  <input className="input" style={{width:90, marginRight:8}} type="number" min={1} defaultValue={4} id={`alloc-${t.id}`} />
-                  <button className="btn" onClick={()=>{
-                    const v = (document.getElementById(`alloc-${t.id}`) as HTMLInputElement).valueAsNumber || 2
-                    allocate(t.id, v)
-                  }}>Allocate</button>
-                  &nbsp;
-                  <button className="btn secondary" onClick={()=>{
-                    const actual = prompt('Enter actual close date (YYYY-MM-DD):', new Date().toISOString().slice(0,10))
-                    if(actual) closeTask(t.id, new Date(actual).toISOString())
-                  }}>Mark Complete</button>
-                </td>
-              </tr>
-            })}
-          </tbody>
-        </table>
-        <p className="small">Try allocating 8h to “Enablement Deck v2 — Design QA”, then mark it complete earlier than baseline to see realized dollars.</p>
+        <h3 className="h">Gantt: critical path hotspots (allocate on the right)</h3>
+        <Gantt tasks={tasks} onAllocate={allocate} onComplete={closeTask}/>
       </div>
 
       <div className="card">
@@ -235,7 +195,7 @@ export default function Demo(){
             </> : <p className="small">Toggle “Service deflection” on to simulate.</p>}
           </div>
         </div>
-        <p className="small">In production, we only count hard savings when POs/seats/contracts are actually reduced. Here you click “Harvest” to simulate that step.</p>
+        <p className="small">In production, we count hard savings only when POs/seats/contracts are actually reduced. Here you click “Harvest” to simulate that step.</p>
       </div>
 
       <div className="card">
@@ -256,41 +216,27 @@ export default function Demo(){
           </tbody>
         </table>
       </div>
-
-      <div className="card">
-        <h3 className="h">How this demo maps to the real product</h3>
-        <ul className="small">
-          <li>Signals → tokens: Zap runs, meeting cuts, auto‑status, faster drafts, RPA transactions, Service deflection.</li>
-          <li>Hotspots: zero‑slack, high cost‑of‑delay tasks. No forecasting—just critical path and OKRs.</li>
-          <li>Proof: dollars appear only when milestones close faster or when hard savings are harvested (with owners in production).</li>
-          <li>Privacy: no keystrokes, no timesheets. In production we use read‑only APIs and an audit trail.</li>
-        </ul>
-      </div>
     </div>
   )
 }
 
-/* ====== logic helpers ====== */
+/* ====== minting logic ====== */
 function mintTokens(simRPA:boolean, simSVC:boolean){
   const now = new Date().toISOString()
-  const baseEvents: AutoEvent[] = [
+  const events: AutoEvent[] = [
     { id:'e1', type:'zap_lead_triage', ts:now, data:{ runs: 600 } },
     { id:'e2', type:'meeting_cut', ts:now, data:{ series:'Weekly GTM', deltaMinutes:30, attendees:['u1','u2','u3','u4'] } },
     { id:'e3', type:'auto_status', ts:now, data:{ count:6 } },
     { id:'e4', type:'draft_speedup', ts:now, data:{ items:7, deltaDaysPerItem: 1.0 } },
   ]
-  if(simRPA){
-    baseEvents.push({ id:'e5', type:'rpa_claims_bot', ts:now, data:{ txns: 10000, contractorRate:95, contractorShare:0.3 } })
-  }
-  if(simSVC){
-    baseEvents.push({ id:'e6', type:'service_deflection', ts:now, data:{ deflected: 400, costPerTicket: 6.5 } })
-  }
+  if(simRPA) events.push({ id:'e5', type:'rpa_block', ts:now, data:{ txns: 10000, contractorRate:95, contractorShare:0.3 } })
+  if(simSVC) events.push({ id:'e6', type:'service_deflection', ts:now, data:{ deflected: 400, costPerTicket: 6.5 } })
 
   const tokens: Token[] = []
   let rpa: {hours:number; contractorHours:number; contractorRate:number; dollars:number} | null = null
   let svc: {tickets:number; costPerTicket:number; dollars:number} | null = null
 
-  for(const ev of baseEvents){
+  for(const ev of events){
     if(ev.type==='zap_lead_triage'){
       const minutes = ev.data.runs * STC.perZapRun
       for(const [uid,share] of Object.entries(ownerShare)){
@@ -311,7 +257,7 @@ function mintTokens(simRPA:boolean, simSVC:boolean){
       const minutes = ev.data.items * ev.data.deltaDaysPerItem * STC.makerMinutesPerDay
       tokens.push({ teamId:'marketing', minutes, source:'Faster Drafts (AI)', confidence:'Medium' })
     }
-    if(ev.type==='rpa_claims_bot'){
+    if(ev.type==='rpa_block'){
       const freedMinutes = ev.data.txns * STC.rpaMinutesPerTxn * STC.realization
       tokens.push({ teamId:'marketing', minutes: freedMinutes, source:'RPA Bot (Block)', confidence:'High' })
       const hours = freedMinutes/60
