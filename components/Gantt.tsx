@@ -7,7 +7,7 @@ export type Task = {
   project: string
   assignees: string[]
   start: string  // ISO
-  due: string    // ISO (current due; after “complete” this is actual close)
+  due: string    // ISO (current due or actual close)
   baselineDays: number
   slackDays: number
   codPerDay: number
@@ -15,24 +15,23 @@ export type Task = {
   status: 'open' | 'closed'
   allocatedMinutes?: number
   capability?: boolean
-  dependsOn?: string       // predecessor id (for arrows)
-  // the two below are optional fields the page sets
-  predictedDaysSaved?: number     // from allocation (ghost shorten)
-  plannedDue?: string             // original scheduled due; draw tick when changed
+  dependsOn?: string         // predecessor id
+  // optional fields used for visuals
+  predictedDaysSaved?: number
+  plannedDue?: string
 }
 
 export type CapEvent = {
-  dayOffset: number        // days from first visible day
-  label: string            // “Copilot: shorter meeting”
+  dayOffset: number
+  label: string
   hours: number
   project?: string
 }
 
 type Row = Task & {
-  // weekly layout
-  startWeek: number        // start column (week index)
-  spanWeeks: number        // number of week columns the current bar spans
-  plannedSpanWeeks?: number// span for plannedDue (tick)
+  startWeek: number
+  spanWeeks: number
+  plannedSpanWeeks?: number
   rowIndex: number
 }
 
@@ -44,16 +43,14 @@ type Props = {
   onView?: (taskId: string) => void
 }
 
-// Hydration‑safe date formatting (fixed locale + UTC)
-const dtf = new Intl.DateTimeFormat('en-US', { month:'short', day:'numeric', timeZone:'UTC' })
-const fmt = (d: Date) => dtf.format(d)
-const daysBetween = (a: Date, b: Date) => Math.max(1, Math.round((b.getTime() - a.getTime()) / 86400000))
+// hydration‑safe weekly math
+const MS = 86400000
+const diffDaysZero = (a: Date, b: Date) => Math.max(0, Math.floor((b.getTime() - a.getTime()) / MS))
 
 export default function Gantt({ tasks, capacity, onAllocate, onComplete, onView }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null)
-  const [gridW, setGridW] = useState<number | null>(null) // null until measured (avoid hydration warnings)
+  const [gridW, setGridW] = useState<number | null>(null)
 
-  // weekly grid
   const LEFT_COL = 280
   const RIGHT_COL = 280
   const ROW_H = 36
@@ -61,7 +58,6 @@ export default function Gantt({ tasks, capacity, onAllocate, onComplete, onView 
   const CAP_ROW_H = 36
   const MIN_WEEKS = 5
 
-  // measure container width after mount (for arrow anchors)
   useEffect(() => {
     const el = wrapRef.current
     if (!el) return
@@ -80,28 +76,27 @@ export default function Gantt({ tasks, capacity, onAllocate, onComplete, onView 
       minStart = new Date(Math.min(...open.map(t => new Date(t.start).getTime())))
       maxDue   = new Date(Math.max(...open.map(t => new Date(t.due).getTime())))
     }
-    const start = new Date(minStart); start.setDate(start.getDate() - 1) // pad one day
-    const end   = new Date(maxDue);   end.setDate(end.getDate() + 1)
-    const spanDays  = Math.max(1, daysBetween(start, end))
-    const spanWeeks = Math.max(MIN_WEEKS, Math.ceil(spanDays / 7))
+    const start = new Date(minStart) // zero‑based math; don’t pad a day
+    const totalDays = Math.max(1, diffDaysZero(start, new Date(maxDue)))
+    const spanWeeks = Math.max(MIN_WEEKS, Math.ceil(totalDays / 7))
 
     const rows: Row[] = open.map((t, idx) => {
-      const s = new Date(t.start)
-      const d = new Date(t.due)
-      const offsetDays   = daysBetween(start, s)
-      const durationDays = daysBetween(s, d)
-      const startWeek    = Math.floor(offsetDays / 7)
-      const spanW        = Math.max(1, Math.ceil(durationDays / 7))
+      const s = new Date(t.start), d = new Date(t.due)
+      const startIdx = diffDaysZero(start, s)
+      const durDays  = Math.max(1, diffDaysZero(s, d))
+      const startWeek = Math.min(spanWeeks-1, Math.floor(startIdx / 7))
+      const spanW     = Math.max(1, Math.ceil(durDays / 7))
+
       let plannedSpanWeeks: number | undefined
       if (t.plannedDue) {
         const pd = new Date(t.plannedDue)
-        const pdDays = daysBetween(s, pd)
+        const pdDays = Math.max(1, diffDaysZero(s, pd))
         plannedSpanWeeks = Math.max(1, Math.ceil(pdDays / 7))
       }
+
       return { ...t, startWeek, spanWeeks: spanW, plannedSpanWeeks, rowIndex: idx }
     })
 
-    // capacity aggregated weekly (top labels available in labels array if you want to show in a tooltip)
     const capByWeek: Record<number, {hours:number; labels:string[]}> = {}
     capacity.forEach(ev => {
       const wk = Math.floor(ev.dayOffset / 7)
@@ -114,16 +109,15 @@ export default function Gantt({ tasks, capacity, onAllocate, onComplete, onView 
     return { start, spanWeeks, rows, capByWeek }
   }, [tasks, capacity])
 
-  // Week headers
+  // header (Week 1..Week N)
   const header = Array.from({ length: spanWeeks }, (_, i) => (
     <div key={i} className="cell">Week {i + 1}</div>
   ))
 
-  // bar refs for anchor-based arrows
+  // bar refs for elbow arrows
   const barRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const setBarRef = (id: string) => (el: HTMLDivElement | null) => { barRefs.current[id] = el }
 
-  // compute elbow arrows using measured bar positions
   const [paths, setPaths] = useState<string[]>([])
   useEffect(() => {
     if (gridW === null || !wrapRef.current) return
@@ -146,7 +140,6 @@ export default function Gantt({ tasks, capacity, onAllocate, onComplete, onView 
     setPaths(p)
   }, [rows, gridW])
 
-  // Render
   return (
     <div className="gantt" ref={wrapRef}>
       {/* Legend */}
@@ -156,7 +149,7 @@ export default function Gantt({ tasks, capacity, onAllocate, onComplete, onView 
         <div className="legendItem"><div className="legendColor green"></div> On track (slack &gt; 1 week)</div>
       </div>
 
-      {/* Arrows */}
+      {/* Elbow arrows */}
       {gridW !== null && (
         <svg className="depsSvg" width="100%" height={HEADER_H + CAP_ROW_H + rows.length * ROW_H}>
           <defs>
@@ -182,13 +175,7 @@ export default function Gantt({ tasks, capacity, onAllocate, onComplete, onView 
         <div className="taskCell">Freed capacity (weekly)</div>
         {Array.from({ length: spanWeeks }).map((_, i) => {
           const wk = capByWeek[i]
-          return (
-            <div key={i} className="dayCell">
-              {wk && wk.hours > 0 && (
-                <div className="capacityBlock">+{wk.hours}h freed</div>
-              )}
-            </div>
-          )
+          return <div key={i} className="dayCell">{wk && wk.hours>0 && <div className="capacityBlock">+{wk.hours}h freed</div>}</div>
         })}
         <div className="actionCell"><span className="small">Weekly totals (tool details in the table below)</span></div>
 
@@ -198,10 +185,8 @@ export default function Gantt({ tasks, capacity, onAllocate, onComplete, onView 
           const slackW = r.slackDays / 7
           const state = slackW <= 0 ? 'hot' : (slackW <= 1 ? 'amber' : 'ok')
           const label = state === 'hot' ? 'Critical' : state === 'amber' ? 'Near' : 'On‑track'
-
-          // predicted ghost shorten (from allocation): convert days → week fraction
           const predDays = Math.max(0, r.predictedDaysSaved || 0)
-          const predFrac = Math.min(r.spanWeeks, predDays / 7) // weeks to shorten (fraction ok)
+          const predFrac = Math.min(r.spanWeeks, predDays / 7)
 
           return (
             <div key={r.id} className="ganttRow">
@@ -226,7 +211,7 @@ export default function Gantt({ tasks, capacity, onAllocate, onComplete, onView 
                         <span>{label}</span>
                         {allocHrs > 0 && <span className="allocPill">{allocHrs}h allocated</span>}
 
-                        {/* Ghost shorten overlay (predicted) */}
+                        {/* Predicted ghost shorten */}
                         {predFrac > 0 && (
                           <div
                             className="ghostBar"
@@ -238,7 +223,7 @@ export default function Gantt({ tasks, capacity, onAllocate, onComplete, onView 
                           />
                         )}
 
-                        {/* Old due tick (if we have plannedDue and due was moved earlier) */}
+                        {/* Old due tick if plannedDue > current span */}
                         {r.plannedSpanWeeks && r.plannedSpanWeeks > r.spanWeeks && (
                           <div
                             className="oldDueTick"
@@ -253,17 +238,11 @@ export default function Gantt({ tasks, capacity, onAllocate, onComplete, onView 
               })}
 
               <div className="actionCell">
-                <input className="input" style={{ width: 80 }} type="number" min={1} defaultValue={8} id={`alloc-${r.id}`} />
-                <button className="btn" onClick={() => {
-                  const el = document.getElementById(`alloc-${r.id}`) as HTMLInputElement | null
-                  const v = (el?.valueAsNumber ?? 0) || 4
-                  onAllocate(r.id, v)
-                }}>Allocate</button>
-                <button className="btn secondary" onClick={() => {
-                  const val = prompt('Actual close date (YYYY-MM-DD):', new Date().toISOString().slice(0, 10))
-                  if (val) onComplete(r.id, new Date(val).toISOString())
+                <button className="btn" onClick={()=> onView && onView(r.id)}>Redeploy</button>
+                <button className="btn secondary" onClick={()=>{
+                  const val = prompt('Actual close date (YYYY-MM-DD):', new Date().toISOString().slice(0,10))
+                  if(val){ onComplete(r.id, new Date(val).toISOString()) }
                 }}>Mark complete</button>
-                {onView && <button className="btn ghost" onClick={() => onView(r.id)}>View</button>}
               </div>
             </div>
           )
