@@ -54,8 +54,6 @@ export default function Tour({ open, index, steps, onNext, onPrev, onClose }: Pr
           <div className="small" style={{marginTop:8}}>Step {index+1} of {total}</div>
         </div>
       </div>
-
-      {/* Built-in global highlight style */}
       <style jsx global>{`
         .tour-highlight{
           outline: 2px solid #3b82f6 !important;
