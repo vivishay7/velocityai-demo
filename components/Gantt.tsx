@@ -20,7 +20,13 @@ export type Task = {
 
 export type CapEvent = { dayOffset: number; label: string; hours: number; project?: string }
 
-type Row = Task & { offsetDays:number; durationDays:number; startWeek:number; spanWeeks:number; rowIndex:number }
+type Row = Task & {
+  offsetDays:number
+  durationDays:number
+  startWeek:number
+  spanWeeks:number
+  rowIndex:number
+}
 
 type Props = {
   tasks: Task[] | undefined
@@ -30,12 +36,14 @@ type Props = {
   onView?: (taskId:string)=>void
 }
 
-function fmt(d: Date){ return d.toLocaleDateString(undefined,{month:'short', day:'numeric'}) }
+// Hydration-safe date format (fixed locale + timezone)
+const dtf = new Intl.DateTimeFormat('en-US', { month:'short', day:'numeric', timeZone:'UTC' })
+function fmt(d: Date){ return dtf.format(d) }
 function daysBetween(a: Date, b: Date){ return Math.max(1, Math.round((b.getTime()-a.getTime())/86400000)) }
 
 export default function Gantt({tasks, capacity, onAllocate, onComplete, onView}:Props){
   const wrapRef = useRef<HTMLDivElement>(null)
-  const [gridW, setGridW] = useState(960) // default; updated after mount
+  const [gridW, setGridW] = useState<number | null>(null) // null until measured (avoid hydration mismatches)
 
   // constants for layout (weekly view)
   const LEFT_COL = 240
@@ -47,9 +55,10 @@ export default function Gantt({tasks, capacity, onAllocate, onComplete, onView}:
   useEffect(()=>{
     const el = wrapRef.current
     if(!el) return
-    const obs = new ResizeObserver(()=> setGridW(el.clientWidth))
+    const measure = () => setGridW(el.clientWidth)
+    measure()
+    const obs = new ResizeObserver(measure)
     obs.observe(el)
-    setGridW(el.clientWidth)
     return ()=> obs.disconnect()
   },[])
 
@@ -97,8 +106,10 @@ export default function Gantt({tasks, capacity, onAllocate, onComplete, onView}:
     return <div key={i} className="cell">{fmt(d)}</div>
   })
 
-  // simple dependency arrows (weekly granularity)
-  const colW = Math.max(40, (gridW - LEFT_COL - RIGHT_COL) / Math.max(1, spanWeeks))
+  // simple dependency arrows (weekly granularity), only after measured
+  const colW = gridW
+    ? Math.max(40, (gridW - LEFT_COL - RIGHT_COL) / Math.max(1, spanWeeks))
+    : 80 // fallback before measurement
   const svgH = HEADER_H + CAP_ROW_H + rows.length * ROW_H
 
   const deps: {x1:number;y1:number;x2:number;y2:number}[] = []
@@ -119,22 +130,25 @@ export default function Gantt({tasks, capacity, onAllocate, onComplete, onView}:
   return (
     <div className="gantt" ref={wrapRef}>
       {/* Legend */}
-      <div className="legend"> <span className="dot red"></span> Critical (0 slack) 
-        <span className="dot amber" style={{marginLeft:16}}></span> Near (&le; 1 week slack) 
-        <span className="dot green" style={{marginLeft:16}}></span> On track (&gt; 1 week) 
+      <div className="legend">
+        <span className="dot red"></span> Critical (0 slack)
+        <span className="dot amber" style={{marginLeft:16}}></span> Near (&le; 1 week slack)
+        <span className="dot green" style={{marginLeft:16}}></span> On track (&gt; 1 week)
       </div>
 
-      {/* SVG arrows */}
-      <svg width="100%" height={svgH} className="depsSvg">
-        <defs>
-          <marker id="arrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
-            <path d="M0,0 L8,3 L0,6 Z" fill="#6aa7ff" />
-          </marker>
-        </defs>
-        {deps.map((p,i)=>(
-          <line key={i} x1={p.x1} y1={p.y1} x2={p.x2} y2={p.y2} stroke="#6aa7ff" strokeWidth="2" markerEnd="url(#arrow)" />
-        ))}
-      </svg>
+      {/* SVG arrows (render only after measured to avoid hydration mismatches) */}
+      {gridW !== null && (
+        <svg width="100%" height={svgH} className="depsSvg">
+          <defs>
+            <marker id="arrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+              <path d="M0,0 L8,3 L0,6 Z" fill="#6aa7ff" />
+            </marker>
+          </defs>
+          {deps.map((p,i)=>(
+            <line key={i} x1={p.x1} y1={p.y1} x2={p.x2} y2={p.y2} stroke="#6aa7ff" strokeWidth="2" markerEnd="url(#arrow)" />
+          ))}
+        </svg>
+      )}
 
       {/* Grid */}
       <div className="ganttGrid" style={{gridTemplateColumns: `240px repeat(${spanWeeks}, 1fr) 260px`}}>
@@ -154,7 +168,7 @@ export default function Gantt({tasks, capacity, onAllocate, onComplete, onView}:
             )}
           </div>
         })}
-        <div className="actionCell"><span className="small">Weekly totals (click View details in table below)</span></div>
+        <div className="actionCell"><span className="small">Weekly totals (tool details in the table below)</span></div>
 
         {/* Task rows */}
         {rows.map(r=>{
@@ -167,7 +181,10 @@ export default function Gantt({tasks, capacity, onAllocate, onComplete, onView}:
             <div key={r.id} className="ganttRow">
               <div className="taskCell">
                 <div className="tName">{r.name}</div>
-                <div className="small">{r.project} • Baseline {r.baselineDays}d • CoD ${r.codPerDay.toLocaleString()}{r.capability?' • Capability':''}</div>
+                <div className="small">
+                  {r.project} • Baseline {r.baselineDays}d • CoD ${r.codPerDay.toLocaleString()}
+                  {r.capability ? ' • Capability' : ''}
+                </div>
               </div>
 
               {Array.from({length: spanWeeks}).map((_,i)=>{
