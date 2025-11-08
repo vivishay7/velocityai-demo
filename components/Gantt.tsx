@@ -134,12 +134,7 @@ export default function Gantt({ tasks, capacity, onAllocate, onComplete, onView 
   return (
     <div className="gantt" ref={wrapRef}>
       {/* Legend */}
-      <div className="legend">
-        <div className="legendItem"><div className="legendColor red"></div> Critical (slack = 0)</div>
-        <div className="legendItem"><div className="legendColor yellow"></div> Near‑crit (slack <= 1 week)</div>
-        <div className="legendItem"><div className="legendColor green"></div> On track (slack > 1 week)</div>
-      </div>
-
+      <div className="legendItem"><div className="legendColor yellow"></div> Near‑crit (slack &le; 1 week)</div> <div className="legendItem"><div className="legendColor green"></div> On track (slack &gt; 1 week)</div>
       {/* Arrows */}
       {gridW !== null && (
         <svg className="depsSvg" width="100%" height={HEADER_H + CAP_ROW_H + rows.length * ROW_H}>
