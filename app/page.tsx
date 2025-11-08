@@ -20,10 +20,10 @@ const STC = {
 
 const seeded: Task[] = [
   { id:'t1', name:'Design QA', project:'Q4 Sales Enablement', assignees:['u1'], start:d(-6), due:d(+4), baselineDays:4, slackDays:0, codPerDay:7500, mvi:0.84, status:'open', allocatedMinutes:0 },
-  { id:'t2', name:'Field Pilot Synthesis', project:'Q4 Sales Enablement', assignees:['u2'], start:d(-2), due:d(+5), baselineDays:3, slackDays:0, codPerDay:3500, mvi:0.77, status:'open', allocatedMinutes:0, capability:true },
-  { id:'t3', name:'Email Copy v1', project:'Q4 Campaign Email Sprint', assignees:['u3'], start:d(-3), due:d(+2), baselineDays:3, slackDays:1, codPerDay:2500, mvi:0.6, status:'open', allocatedMinutes:0 },
-  { id:'t4', name:'Design Build', project:'Q4 Campaign Email Sprint', assignees:['u4'], start:d(-1), due:d(+6), baselineDays:5, slackDays:2, codPerDay:3000, mvi:0.65, status:'open', allocatedMinutes:0 },
-  { id:'t5', name:'SEO QA', project:'Website Refresh', assignees:['u1'], start:d(-4), due:d(+3), baselineDays:4, slackDays:0, codPerDay:4000, mvi:0.7, status:'open', allocatedMinutes:0 },
+  { id:'t2', name:'Field Pilot Synthesis', project:'Q4 Sales Enablement', assignees:['u2'], start:d(-2), due:d(+5), baselineDays:3, slackDays:0, codPerDay:3500, mvi:0.77, status:'open', allocatedMinutes:0, capability:true, dependsOn:['t1'] },
+  { id:'t3', name:'Email Copy v1', project:'Q4 Campaign Email Sprint', assignees:['u3'], start:d(-3), due:d(+2), baselineDays:3, slackDays:1, codPerDay:2500, mvi:0.6, status:'open', allocatedMinutes:0, dependsOn:['t2'] },
+  { id:'t4', name:'Design Build', project:'Q4 Campaign Email Sprint', assignees:['u4'], start:d(-1), due:d(+6), baselineDays:5, slackDays:2, codPerDay:3000, mvi:0.65, status:'open', allocatedMinutes:0, dependsOn:['t3'] },
+  { id:'t5', name:'SEO QA', project:'Website Refresh', assignees:['u1'], start:d(-4), due:d(+3), baselineDays:4, slackDays:0, codPerDay:4000, mvi:0.7, status:'open', allocatedMinutes:0, dependsOn:['t4'] },
 ]
 
 export default function Page(){
